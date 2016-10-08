@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"sync"
 )
 
 func GetVersion() string {
@@ -45,30 +46,94 @@ func New() XFile {
 	return xf
 }
 
-// ExtractMetadataFromStream - given the file type, call for experts to fetch meta informatin
-func (xf XFile) ExtractMetadataFromStream(reader io.Reader, fileType string) (*xfileResponse, error) {
-	// Instantiate export module according to the filetype
+// ExtractMetadataFromStream - given the file type, call for experts to fetch meta information.
+func (xf XFile) ExtractMetadataFromStream(input io.Reader, fileType string) (*xfileResponse, error) {
+
+	// Check if there is at least one expert which supports the passed file type
 	experts, ok := xf.mimesExperts[fileType]
 	if !ok || len(experts) == 0 {
-		return nil, errors.New("`" + fileType + "` mime unsupported")
+		return nil, errors.New("`" + fileType + "` mime not supported")
+	}
+
+	// Setup pipe to transfer file data to all experts
+	pipesRd := make([]io.ReadCloser, len(experts))
+	pipesWr := make([]io.WriteCloser, len(experts))
+	for i := range experts {
+		r, w := io.Pipe()
+		pipesRd[i] = r
+		pipesWr[i] = w
 	}
 
 	var metas []interface{}
 	var descs, keys []string
 
-	// Loop over all experts and gather their results
-	for _, e := range experts {
-		d, k, m, err := e.Inspect(fileType, reader)
-		if err != nil {
-			return nil, err
-		}
-		descs = append(descs, d)
-		keys = append(keys, k...)
-		metas = append(metas, struct {
-			ExpertName string
-			Meta       interface{}
-		}{ExpertName: e.GetName(), Meta: m})
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Run experts inspection job in parallel
+	for i, e := range experts {
+		wg.Add(1)
+		go func(idx int, expert Expert) {
+			defer wg.Done()
+			defer pipesRd[idx].Close()
+
+			// Call for expert inspection
+			d, k, m, err := expert.Inspect(fileType, pipesRd[idx])
+			if err != nil {
+				return
+			}
+
+			// Append inspection results
+			mu.Lock()
+			descs = append(descs, d)
+			keys = append(keys, k...)
+			metas = append(metas, struct {
+				ExpertName string
+				Meta       interface{}
+			}{ExpertName: expert.GetName(), Meta: m})
+			mu.Unlock()
+
+		}(i, e)
 	}
+
+	errPipes := make([]bool, len(experts))
+	eof := false
+
+	// Duplicate incoming file data to all experts. MultiWriter is avoided because it quits on the first encountered error
+	for {
+		// Read some data from input file
+		buf := make([]byte, 4*1024)
+		_, err := input.Read(buf)
+		switch err {
+		case nil:
+		case io.EOF:
+			eof = true
+		default:
+			break
+		}
+		// Distribute input data to all experts
+		for i := range experts {
+			if errPipes[i] {
+				continue
+			}
+			_, err = pipesWr[i].Write(buf)
+			if err != nil {
+				errPipes[i] = true
+			}
+		}
+		// Terminate when we don't have anymore data from input file
+		if eof {
+			break
+		}
+	}
+
+	// Close all write pipes
+	for i := range experts {
+		pipesWr[i].Close()
+	}
+
+	// Wait until all experts terminate their jobs
+	wg.Wait()
 
 	return &xfileResponse{TextDescs: descs, Keywords: keys, Metas: metas}, nil
 }
@@ -94,6 +159,8 @@ func (xf XFile) ExtractMetadata(fileURI string) (string, *xfileResponse, error) 
 
 	// Reconstruct the original reader
 	replay := io.MultiReader(&saveBuf, stream)
+
+	// Run the real extraction work
 	meta, err := xf.ExtractMetadataFromStream(replay, fileType)
 
 	return fileType, meta, err
