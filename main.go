@@ -16,59 +16,8 @@
 
 package main
 
-import (
-	"log"
-
-	cli "github.com/minio/cli"
-)
-
-// Help template for xfile.
-var xfileHelpTemplate = `NAME:
-{{.Name}} - {{.Usage}}
-
-DESCRIPTION:
-  {{.Description}}
-
-USAGE:
-  xfile {{if .Flags}}[flags] {{end}}command{{if .Flags}}{{end}} [arguments...]
-
-COMMANDS:
-  {{range .Commands}}{{join .Names ", "}}{{ "\t" }}{{.Usage}}
-  {{end}}{{if .Flags}}
-FLAGS:
-  {{range .Flags}}{{.}}
-  {{end}}{{end}}
-
-VERSION:
-  ` + "0.0.1" +
-	`{{ "\n"}}`
-
-var (
-	// global flags for xfile.
-	globalFlags = []cli.Flag{
-		cli.BoolFlag{
-			Name:  "help, h",
-			Usage: "Show help.",
-		},
-		cli.BoolFlag{
-			Name:  "json, j",
-			Usage: "Print result in json format.",
-		},
-	}
-)
+import xfile "github.com/minio/xfile/cmd"
 
 func main() {
-	// Set up app.
-	app := cli.NewApp()
-	app.Name = "xfile"
-	app.Usage = "Extract meta information from input data"
-	app.Description = "Pass the file content to intelligent engine to identify relevant information related to the content."
-	app.Flags = globalFlags
-	app.Commands = []cli.Command{xCmd}
-	app.CustomAppHelpTemplate = xfileHelpTemplate
-	app.CommandNotFound = func(ctx *cli.Context, command string) {
-		log.Fatalln("Command `" + command + "` not found.")
-	}
-
-	app.RunAndExitOnError()
+	xfile.Main()
 }
