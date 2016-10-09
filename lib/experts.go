@@ -18,5 +18,6 @@ package xfile
 
 var registeredExperts = []Expert{
 	jpegInfo{},
+	mxnetInfo{},
 	pngInfo{},
 }
