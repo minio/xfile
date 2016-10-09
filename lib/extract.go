@@ -87,10 +87,12 @@ func (xf XFile) ExtractMetadataFromStream(input io.Reader, fileType string) (*xf
 			mu.Lock()
 			descs = append(descs, d)
 			keys = append(keys, k...)
-			metas = append(metas, struct {
-				ExpertName string
-				Meta       interface{}
-			}{ExpertName: expert.GetName(), Meta: m})
+			if m != nil {
+				metas = append(metas, struct {
+					ExpertName string
+					Meta       interface{}
+				}{ExpertName: expert.GetName(), Meta: m})
+			}
 			mu.Unlock()
 
 		}(i, e)
