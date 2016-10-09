@@ -68,21 +68,21 @@ func mainX(ctx *cli.Context) {
 		fmt.Println(string(output))
 	} else {
 		// Print normal output
-		fmt.Print("Desc:\n")
+		log.Print("Desc:\n")
 		for _, d := range meta.TextDescs {
-			fmt.Print("- " + d + "\n")
+			log.Print("- " + d + "\n")
 		}
-		fmt.Print("Keywords:\n")
+		log.Print("Keywords:\n")
 		for _, k := range meta.Keywords {
-			fmt.Print("- " + k + "\n")
+			log.Print("- " + k + "\n")
 		}
-		fmt.Print("Meta:\n")
+		log.Print("Meta:\n")
 		for _, m := range meta.Metas {
 			output, err := json.Marshal(m)
 			if err != nil {
 				log.Fatalln(err)
 			}
-			fmt.Println("- " + string(output))
+			log.Println("- " + string(output))
 		}
 	}
 }
